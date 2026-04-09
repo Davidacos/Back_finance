@@ -21,22 +21,26 @@ export const createFixedExpensesRoutes = (pool, env) => {
   router.get(
     '/',
     validate(getFixedExpensesQuerySchema, 'query'),
-    controller.getAll
+    controller.getAll.bind(controller)
   );
   
   router.post(
     '/',
     validate(createFixedExpenseSchema),
-    controller.create
+    controller.create.bind(controller)
   );
   
   router.put(
     '/:id',
     validate(updateFixedExpenseSchema),
-    controller.update
+    controller.update.bind(controller)
   );
   
-  router.delete('/:id', controller.delete);
+  router.delete('/:id', controller.delete.bind(controller));
+  
+  // Payment tracking
+  router.post('/:id/pay', controller.markAsPaid.bind(controller));
+  router.get('/history/payments', controller.getPayments.bind(controller));
 
   return router;
 };

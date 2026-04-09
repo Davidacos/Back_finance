@@ -18,8 +18,10 @@ export const createReportsRoutes = (pool, env) => {
   router.get(
     '/monthly',
     validate(monthlyReportQuerySchema, 'query'),
-    controller.getMonthlyReport
+    controller.getMonthlyReport.bind(controller)
   );
+  router.get('/detailed', controller.getDetailedReport.bind(controller));
+  router.get('/export/csv', controller.exportCSV.bind(controller));
 
   return router;
 };

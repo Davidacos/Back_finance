@@ -30,4 +30,25 @@ export class ReportsRepository {
     const { rows } = await db.query(query, params);
     return rows;
   }
+
+  async getDetailedReportByRange(userId, startDate, endDate, client = null) {
+    const db = client || this.pool;
+    
+    // Get all transactions in range with category details
+    const { rows } = await db.query(
+      `SELECT 
+        t.*, 
+        c.name as category_name, 
+        c.type as category_type
+       FROM transactions t
+       LEFT JOIN categories c ON t.category_id = c.id
+       WHERE t.user_id = $1 
+         AND t.transaction_date BETWEEN $2 AND $3
+         AND t.deleted_at IS NULL
+       ORDER BY t.transaction_date DESC`,
+      [userId, startDate, endDate]
+    );
+    
+    return rows;
+  }
 }

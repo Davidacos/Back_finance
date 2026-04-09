@@ -12,7 +12,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TYPE category_type AS ENUM ('income', 'expense');
 CREATE TYPE payment_method_type AS ENUM ('cash', 'credit_card', 'debit_card', 'bank_transfer', 'other');
-CREATE TYPE frequency_type AS ENUM ('monthly', 'yearly');
+CREATE TYPE frequency_type AS ENUM ('monthly', 'yearly', 'biweekly');
 
 -- 🛠️ FUNCIÓN GENÉRICA PARA ACTUALIZACIÓN AUTOMÁTICA DEL CAMPO updated_at
 -- Esta función asegura que el campo updated_at refleje siempre la última transacción real
@@ -82,7 +82,7 @@ CREATE TRIGGER update_categories_modtime BEFORE UPDATE ON categories FOR EACH RO
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
-    category_id UUID NOT NULL,
+    category_id UUID NULL,
     type category_type NOT NULL,
     amount DECIMAL(15, 2) NOT NULL CHECK (amount > 0),
     description VARCHAR(255),
@@ -117,6 +117,19 @@ CREATE TABLE IF NOT EXISTS fixed_expenses (
 );
 
 CREATE TRIGGER update_fixed_expenses_modtime BEFORE UPDATE ON fixed_expenses FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS fixed_expense_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    fixed_expense_id UUID NOT NULL,
+    transaction_id UUID NOT NULL,
+    payment_date DATE NOT NULL,
+    period_year INT NOT NULL,
+    period_month INT NOT NULL,
+    period_type VARCHAR(20) DEFAULT 'monthly', -- 'monthly', 'fortnight_1', 'fortnight_2'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (fixed_expense_id) REFERENCES fixed_expenses(id) ON DELETE CASCADE,
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+);
 
 -- ==============================================================================
 -- 🚀 ÍNDICES OPTIMIZADOS

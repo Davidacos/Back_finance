@@ -23,7 +23,7 @@ export const generalLimiter = (env) =>
 export const authLimiter = (env) =>
   rateLimit({
     windowMs: 15 * 60 * 1000, // Fixed 15 minutes window for auth limits
-    max: 5, // Strict 5 requests per 15 min
+    max: env.AUTH_RATE_LIMIT_MAX || 5, // Use environment variable or fallback to 5
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => {

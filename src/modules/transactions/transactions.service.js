@@ -14,19 +14,21 @@ export class TransactionsService {
       await client.query('BEGIN');
       
       // Validate that the category exists and belongs to the user or is default
-      const category = await this.categoryRepository.findByIdAndUser(data.category_id, userId, client);
-      
-      if (!category) {
-        const error = new Error('Category not found or unauthorized');
-        error.statusCode = 404;
-        throw error;
-      }
+      if (data.category_id) {
+        const category = await this.categoryRepository.findByIdAndUser(data.category_id, userId, client);
+        
+        if (!category) {
+          const error = new Error('Category not found or unauthorized');
+          error.statusCode = 404;
+          throw error;
+        }
 
-      // Optional: Validation to strictly match transaction 'type' with category 'type'
-      if (category.type !== data.type) {
-        const error = new Error(`Transaction type (${data.type}) does not match category type (${category.type})`);
-        error.statusCode = 400;
-        throw error;
+        // Optional: Validation to strictly match transaction 'type' with category 'type'
+        if (category.type !== data.type) {
+          const error = new Error(`Transaction type (${data.type}) does not match category type (${category.type})`);
+          error.statusCode = 400;
+          throw error;
+        }
       }
 
       const transaction = await this.repository.create({ user_id: userId, ...data }, client);
@@ -54,22 +56,24 @@ export class TransactionsService {
       }
 
       // If category_id or type changes, re-validate relationship
-      if (data.category_id || data.type) {
-        const catId = data.category_id || transaction.category_id;
+      if (data.category_id !== undefined || data.type !== undefined) {
+        const catId = data.category_id !== undefined ? data.category_id : transaction.category_id;
         const tType = data.type || transaction.type;
         
-        const category = await this.categoryRepository.findByIdAndUser(catId, userId, client);
-        
-        if (!category) {
-          const error = new Error('Category not found or unauthorized');
-          error.statusCode = 404;
-          throw error;
-        }
+        if (catId) {
+          const category = await this.categoryRepository.findByIdAndUser(catId, userId, client);
+          
+          if (!category) {
+            const error = new Error('Category not found or unauthorized');
+            error.statusCode = 404;
+            throw error;
+          }
 
-        if (category.type !== tType) {
-          const error = new Error(`Transaction type (${tType}) does not match category type (${category.type})`);
-          error.statusCode = 400;
-          throw error;
+          if (category.type !== tType) {
+            const error = new Error(`Transaction type (${tType}) does not match category type (${category.type})`);
+            error.statusCode = 400;
+            throw error;
+          }
         }
       }
 

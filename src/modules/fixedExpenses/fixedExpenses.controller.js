@@ -45,4 +45,22 @@ export class FixedExpensesController {
       next(error);
     }
   };
+
+  async markAsPaid(req, res, next) {
+    try {
+      const transaction = await this.service.markAsPaid(req.params.id, req.user.id, req.body);
+      res.status(201).json({ success: true, data: { transaction } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getPayments(req, res, next) {
+    try {
+      const payments = await this.service.getPayments(req.user.id, req.query);
+      res.json({ success: true, data: { payments } });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

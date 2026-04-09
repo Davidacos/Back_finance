@@ -39,10 +39,27 @@ export class FixedExpensesRepository {
   async findByIdAndUser(id, userId, client = null) {
     const db = client || this.pool;
     const { rows } = await db.query(
-      `SELECT * FROM fixed_expenses WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      `SELECT 
+        f.*,
+        c.name as category_name, c.icon as category_icon, c.color as category_color
+      FROM fixed_expenses f
+      LEFT JOIN categories c ON f.category_id = c.id
+      WHERE f.id = $1 AND f.user_id = $2 AND f.deleted_at IS NULL`,
       [id, userId]
     );
-    return rows[0] || null;
+    
+    if (!rows[0]) return null;
+
+    const { category_name, category_icon, category_color, ...expense } = rows[0];
+    return {
+      ...expense,
+      category: {
+        id: expense.category_id,
+        name: category_name,
+        icon: category_icon,
+        color: category_color
+      }
+    };
   }
 
   async create(expense, client = null) {
@@ -101,5 +118,38 @@ export class FixedExpensesRepository {
       [id, userId]
     );
     return result.rowCount > 0;
+  }
+
+  async findPaymentsForUser(userId, filters = {}, client = null) {
+    const db = client || this.pool;
+    const { year, month } = filters;
+    
+    let query = `
+      SELECT 
+        p.*, 
+        f.name as expense_name,
+        t.amount as transaction_amount
+      FROM fixed_expense_payments p
+      JOIN fixed_expenses f ON p.fixed_expense_id = f.id
+      JOIN transactions t ON p.transaction_id = t.id
+      WHERE f.user_id = $1
+    `;
+    
+    const values = [userId];
+    
+    if (year) {
+      values.push(year);
+      query += ` AND p.period_year = $${values.length}`;
+    }
+    
+    if (month) {
+      values.push(month);
+      query += ` AND p.period_month = $${values.length}`;
+    }
+    
+    query += ` ORDER BY p.payment_date DESC`;
+    
+    const { rows } = await db.query(query, values);
+    return rows;
   }
 }
