@@ -3,7 +3,8 @@ export class ReportsRepository {
     this.pool = pool;
   }
 
-  async getMonthlySummary(userId, year, month) {
+  async getMonthlySummary(userId, year, month, client = null) {
+    const db = client || this.pool;
     // We assume the VIEW `v_monthly_summary` already exists in your DB
     // Expected to have columns like: user_id, year, month, total_income, total_expense, balance, etc.
     // If the view schema differs slightly, this query can be adjusted.
@@ -26,7 +27,7 @@ export class ReportsRepository {
 
     query += ` ORDER BY summary_year DESC, summary_month DESC`;
 
-    const { rows } = await this.pool.query(query, params);
+    const { rows } = await db.query(query, params);
     return rows;
   }
 }

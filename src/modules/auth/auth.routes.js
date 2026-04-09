@@ -4,7 +4,7 @@ import { AuthService } from './auth.service.js';
 import { AuthRepository } from './auth.repository.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { authMiddleware } from '../../middlewares/auth.middleware.js';
-import { registerSchema, loginSchema, changePasswordSchema } from './auth.validator.js';
+import { registerSchema, loginSchema, changePasswordSchema, refreshTokenSchema } from './auth.validator.js';
 import { authLimiter } from '../../middlewares/rateLimiter.middleware.js';
 
 export const createAuthRoutes = (pool, env) => {
@@ -28,6 +28,18 @@ export const createAuthRoutes = (pool, env) => {
     '/login',
     validate(loginSchema),
     controller.login
+  );
+
+  router.post(
+    '/refresh-token',
+    validate(refreshTokenSchema),
+    controller.refreshToken
+  );
+
+  router.post(
+    '/logout',
+    validate(refreshTokenSchema),
+    controller.logout
   );
 
   router.put(

@@ -2,6 +2,8 @@
 -- 🚀 POSTGRESQL PRODUCTION SCHEMA FOR BACK FINANCE
 -- ==============================================================================
 
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- 📌 DECISIONES DE DISEÑO (ENUM vs CHECK):
 -- Se implementan ENUM nativos de PostgreSQL.
 -- Beneficios: 
@@ -39,6 +41,7 @@ CREATE TABLE IF NOT EXISTS users (
     currency_code CHAR(3) DEFAULT 'USD',
     language CHAR(2) DEFAULT 'en',
     monthly_budget DECIMAL(15, 2) NULL,
+    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin')),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -46,9 +49,20 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TRIGGER update_users_modtime BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    token_hash TEXT NOT NULL,
+    user_agent VARCHAR(255),
+    ip_address VARCHAR(45),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
+);
+
 -- 💡 CATEGORIAS GLOBALES:
 -- Para buscar todas las categorías de un usuario, siempre deberás consultar:
--- WHERE user_id = 'UUID-DEL-USUARIO' OR is_default = TRUE;
+-- WHERE (user_id = 'UUID-DEL-USUARIO' OR is_default = TRUE) AND deleted_at IS NULL;
 CREATE TABLE IF NOT EXISTS categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NULL, -- NULL = Categoría del sistema (global)
@@ -59,7 +73,8 @@ CREATE TABLE IF NOT EXISTS categories (
     is_default BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    deleted_at TIMESTAMP WITH TIME ZONE NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
 );
 
 CREATE TRIGGER update_categories_modtime BEFORE UPDATE ON categories FOR EACH ROW EXECUTE FUNCTION update_timestamp();
@@ -69,13 +84,14 @@ CREATE TABLE IF NOT EXISTS transactions (
     user_id UUID NOT NULL,
     category_id UUID NOT NULL,
     type category_type NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
+    amount DECIMAL(15, 2) NOT NULL CHECK (amount > 0),
     description VARCHAR(255),
     transaction_date DATE NOT NULL,
     payment_method payment_method_type NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    deleted_at TIMESTAMP WITH TIME ZONE NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT
 );
 
@@ -86,7 +102,7 @@ CREATE TABLE IF NOT EXISTS fixed_expenses (
     user_id UUID NOT NULL,
     category_id UUID NOT NULL,
     name VARCHAR(100) NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
+    amount DECIMAL(15, 2) NOT NULL CHECK (amount > 0),
     frequency frequency_type NOT NULL,
     day_of_month INT CHECK (day_of_month BETWEEN 1 AND 31),
     start_date DATE NOT NULL,
@@ -95,7 +111,8 @@ CREATE TABLE IF NOT EXISTS fixed_expenses (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    deleted_at TIMESTAMP WITH TIME ZONE NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT
 );
 
@@ -106,15 +123,22 @@ CREATE TRIGGER update_fixed_expenses_modtime BEFORE UPDATE ON fixed_expenses FOR
 -- ==============================================================================
 
 -- Búsqueda principal para el dashboard mensual (Analítica)
-CREATE INDEX idx_transactions_user_date ON transactions(user_id, transaction_date DESC);
-CREATE INDEX idx_transactions_user_type_date ON transactions(user_id, type, transaction_date DESC);
+CREATE INDEX idx_transactions_user_date ON transactions(user_id, transaction_date DESC) WHERE deleted_at IS NULL;
+CREATE INDEX idx_transactions_user_type_date ON transactions(user_id, type, transaction_date DESC) WHERE deleted_at IS NULL;
 
 -- Restricción y búsqueda de gastos fijos activos
-CREATE INDEX idx_fixed_expenses_active ON fixed_expenses(user_id) WHERE is_active = TRUE;
+CREATE INDEX idx_fixed_expenses_active ON fixed_expenses(user_id) WHERE is_active = TRUE AND deleted_at IS NULL;
 
 -- Búsqueda de categorías globales + locales optimizada con cobertura parcial
-CREATE INDEX idx_categories_user_lookup ON categories(user_id) WHERE user_id IS NOT NULL;
-CREATE INDEX idx_categories_default ON categories(is_default) WHERE is_default = TRUE;
+CREATE INDEX idx_categories_user_lookup ON categories(user_id) WHERE user_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX idx_categories_default ON categories(is_default) WHERE is_default = TRUE AND deleted_at IS NULL;
+
+-- Restricción Única de Categorías (Evita duplicidad de nombres activos bajo el mismo usuario)
+CREATE UNIQUE INDEX idx_categories_unique_name_user ON categories(user_id, LOWER(name)) WHERE user_id IS NOT NULL AND deleted_at IS NULL;
+
+-- Optimización de Tokens
+CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
+CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 
 -- ==============================================================================
 -- 📊 VISTAS ANALÍTICAS
@@ -130,6 +154,7 @@ SELECT
     SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as total_expense,
     SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END) as balance
 FROM transactions
+WHERE deleted_at IS NULL
 GROUP BY user_id, EXTRACT(YEAR FROM transaction_date), EXTRACT(MONTH FROM transaction_date);
 
 -- ==============================================================================

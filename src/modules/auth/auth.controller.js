@@ -17,8 +17,31 @@ export class AuthController {
   login = async (req, res, next) => {
     try {
       const { email, password } = req.body;
-      const data = await this.service.login(email, password);
+      const userAgent = req.headers['user-agent'];
+      const ipAddress = req.ip;
+      
+      const data = await this.service.login(email, password, userAgent, ipAddress);
       return sendSuccess(res, data, 200, 'Login successful');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  refreshToken = async (req, res, next) => {
+    try {
+      const { refreshToken } = req.body;
+      const data = await this.service.refreshToken(refreshToken);
+      return sendSuccess(res, data, 200, 'Token refreshed successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  logout = async (req, res, next) => {
+    try {
+      const { refreshToken } = req.body;
+      await this.service.logout(refreshToken);
+      return sendSuccess(res, null, 200, 'Logged out successfully');
     } catch (error) {
       next(error);
     }

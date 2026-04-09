@@ -11,7 +11,7 @@ export class TransactionsController {
       const pagination = parsePagination(req.query);
       const filters = req.query; // Already validated by Zod
 
-      const { transactions, total } = await this.service.getTransactions(
+      const { transactions: data, total } = await this.service.getTransactions(
         req.user.id,
         filters,
         pagination
@@ -19,7 +19,7 @@ export class TransactionsController {
 
       const meta = buildPaginationMeta(total, pagination.page, pagination.limit);
 
-      return sendSuccess(res, { meta, transactions });
+      return sendSuccess(res, { data, meta });
     } catch (error) {
       next(error);
     }

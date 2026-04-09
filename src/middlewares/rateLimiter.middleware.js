@@ -22,9 +22,15 @@ export const generalLimiter = (env) =>
  */
 export const authLimiter = (env) =>
   rateLimit({
-    windowMs: env.RATE_LIMIT_WINDOW_MS,
-    max: env.AUTH_RATE_LIMIT_MAX,
+    windowMs: 15 * 60 * 1000, // Fixed 15 minutes window for auth limits
+    max: 5, // Strict 5 requests per 15 min
     standardHeaders: true,
     legacyHeaders: false,
-    handler: rateLimitHandler,
+    keyGenerator: (req) => {
+      // Prevent brute force by combining IP + email (if provided)
+      return req.body?.email ? `${req.ip}_${req.body.email}` : req.ip;
+    },
+    handler: (req, res) => {
+      sendError(res, 'Too many login attempts. Please try again in 15 minutes.', 429, 'RATE_LIMIT_EXCEEDED');
+    },
   });

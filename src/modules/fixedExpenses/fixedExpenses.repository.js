@@ -3,14 +3,15 @@ export class FixedExpensesRepository {
     this.pool = pool;
   }
 
-  async findAllForUser(userId, includeInactive = false) {
+  async findAllForUser(userId, includeInactive = false, client = null) {
+    const db = client || this.pool;
     let query = `
       SELECT 
         f.*,
         c.name as category_name, c.icon as category_icon, c.color as category_color
       FROM fixed_expenses f
       LEFT JOIN categories c ON f.category_id = c.id
-      WHERE f.user_id = $1
+      WHERE f.user_id = $1 AND f.deleted_at IS NULL
     `;
 
     if (!includeInactive) {
@@ -19,7 +20,7 @@ export class FixedExpensesRepository {
 
     query += ` ORDER BY f.start_date DESC`;
 
-    const { rows } = await this.pool.query(query, [userId]);
+    const { rows } = await db.query(query, [userId]);
 
     return rows.map(row => {
       const { category_name, category_icon, category_color, ...expense } = row;
@@ -35,15 +36,17 @@ export class FixedExpensesRepository {
     });
   }
 
-  async findByIdAndUser(id, userId) {
-    const { rows } = await this.pool.query(
-      `SELECT * FROM fixed_expenses WHERE id = $1 AND user_id = $2`,
+  async findByIdAndUser(id, userId, client = null) {
+    const db = client || this.pool;
+    const { rows } = await db.query(
+      `SELECT * FROM fixed_expenses WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [id, userId]
     );
     return rows[0] || null;
   }
 
-  async create(expense) {
+  async create(expense, client = null) {
+    const db = client || this.pool;
     const { 
       user_id, category_id, name, amount, frequency, 
       day_of_month, start_date, end_date, description 
@@ -52,7 +55,7 @@ export class FixedExpensesRepository {
     // Explicitly handling MySQL's CURRENT_DATE fallback
     const effectiveStartDate = start_date || new Date().toISOString().split('T')[0];
     
-    const { rows } = await this.pool.query(
+    const { rows } = await db.query(
       `INSERT INTO fixed_expenses 
        (user_id, category_id, name, amount, frequency, day_of_month, start_date, end_date, description, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE) RETURNING id`,
@@ -62,10 +65,11 @@ export class FixedExpensesRepository {
       ]
     );
 
-    return this.findByIdAndUser(rows[0].id, user_id);
+    return this.findByIdAndUser(rows[0].id, user_id, client);
   }
 
-  async update(id, userId, data) {
+  async update(id, userId, data, client = null) {
+    const db = client || this.pool;
     const fields = [];
     const values = [];
 
@@ -78,21 +82,22 @@ export class FixedExpensesRepository {
       }
     }
 
-    if (fields.length === 0) return this.findByIdAndUser(id, userId);
+    if (fields.length === 0) return this.findByIdAndUser(id, userId, client);
 
     values.push(id, userId);
 
-    await this.pool.query(
-      `UPDATE fixed_expenses SET ${fields.join(', ')} WHERE id = $${values.length - 1} AND user_id = $${values.length}`,
+    await db.query(
+      `UPDATE fixed_expenses SET ${fields.join(', ')} WHERE id = $${values.length - 1} AND user_id = $${values.length} AND deleted_at IS NULL`,
       values
     );
 
-    return this.findByIdAndUser(id, userId);
+    return this.findByIdAndUser(id, userId, client);
   }
 
-  async softDelete(id, userId) {
-    const result = await this.pool.query(
-      `UPDATE fixed_expenses SET is_active = FALSE WHERE id = $1 AND user_id = $2`,
+  async delete(id, userId, client = null) {
+    const db = client || this.pool;
+    const result = await db.query(
+      `UPDATE fixed_expenses SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [id, userId]
     );
     return result.rowCount > 0;

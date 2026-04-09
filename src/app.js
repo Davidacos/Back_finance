@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { logger } from './utils/logger.js';
 import { generalLimiter } from './middlewares/rateLimiter.middleware.js';
+import { loggerMiddleware } from './middlewares/logger.middleware.js';
 import { errorMiddleware, notFoundMiddleware } from './middlewares/error.middleware.js';
 
 // Route imports
@@ -37,10 +38,7 @@ export const createApp = (pool, env) => {
   app.use('/api/', generalLimiter(env));
 
   // ── Request Logger ───────────────────────────────────────
-  app.use((req, _res, next) => {
-    logger.info({ method: req.method, url: req.url, ip: req.ip }, 'Incoming request');
-    next();
-  });
+  app.use(loggerMiddleware);
 
   // ── Health Check ─────────────────────────────────────────
   app.get('/health', (_req, res) => {

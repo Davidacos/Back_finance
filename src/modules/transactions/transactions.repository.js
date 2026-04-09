@@ -3,11 +3,12 @@ export class TransactionsRepository {
     this.pool = pool;
   }
 
-  async findAndCountAll(userId, filters, pagination) {
+  async findAndCountAll(userId, filters, pagination, client = null) {
+    const db = client || this.pool;
     const { startDate, endDate, type, categoryId } = filters;
     const { limit, offset } = pagination;
 
-    let whereClause = 't.user_id = $1';
+    let whereClause = 't.user_id = $1 AND t.deleted_at IS NULL';
     const values = [userId];
 
     if (startDate) {
@@ -31,7 +32,7 @@ export class TransactionsRepository {
     }
 
     // Get total count for pagination metadata
-    const { rows: countRows } = await this.pool.query(
+    const { rows: countRows } = await db.query(
       `SELECT COUNT(*) as total FROM transactions t WHERE ${whereClause}`,
       values
     );
@@ -43,7 +44,7 @@ export class TransactionsRepository {
     const offsetIndex = values.length + 2;
     const queryValues = [...values, limit, offset];
     
-    const { rows } = await this.pool.query(
+    const { rows } = await db.query(
       `SELECT 
         t.id, t.type, t.amount, t.description, t.transaction_date, 
         t.payment_method, t.created_at,
@@ -73,28 +74,31 @@ export class TransactionsRepository {
     return { transactions, total };
   }
 
-  async findByIdAndUser(id, userId) {
-    const { rows } = await this.pool.query(
-      `SELECT * FROM transactions WHERE id = $1 AND user_id = $2`,
+  async findByIdAndUser(id, userId, client = null) {
+    const db = client || this.pool;
+    const { rows } = await db.query(
+      `SELECT * FROM transactions WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [id, userId]
     );
     return rows[0] || null;
   }
 
-  async create(transaction) {
+  async create(transaction, client = null) {
+    const db = client || this.pool;
     const { user_id, category_id, type, amount, description, transaction_date, payment_method } = transaction;
     
-    const { rows } = await this.pool.query(
+    const { rows } = await db.query(
       `INSERT INTO transactions 
        (user_id, category_id, type, amount, description, transaction_date, payment_method)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
       [user_id, category_id, type, amount, description || null, transaction_date, payment_method]
     );
 
-    return this.findByIdAndUser(rows[0].id, user_id);
+    return this.findByIdAndUser(rows[0].id, user_id, client);
   }
 
-  async update(id, userId, data) {
+  async update(id, userId, data, client = null) {
+    const db = client || this.pool;
     const fields = [];
     const values = [];
 
@@ -105,21 +109,22 @@ export class TransactionsRepository {
       }
     }
 
-    if (fields.length === 0) return this.findByIdAndUser(id, userId);
+    if (fields.length === 0) return this.findByIdAndUser(id, userId, client);
 
     values.push(id, userId);
 
-    await this.pool.query(
-      `UPDATE transactions SET ${fields.join(', ')} WHERE id = $${values.length - 1} AND user_id = $${values.length}`,
+    await db.query(
+      `UPDATE transactions SET ${fields.join(', ')} WHERE id = $${values.length - 1} AND user_id = $${values.length} AND deleted_at IS NULL`,
       values
     );
 
-    return this.findByIdAndUser(id, userId);
+    return this.findByIdAndUser(id, userId, client);
   }
 
-  async delete(id, userId) {
-    const result = await this.pool.query(
-      `DELETE FROM transactions WHERE id = $1 AND user_id = $2`,
+  async delete(id, userId, client = null) {
+    const db = client || this.pool;
+    const result = await db.query(
+      `UPDATE transactions SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [id, userId]
     );
     return result.rowCount > 0;

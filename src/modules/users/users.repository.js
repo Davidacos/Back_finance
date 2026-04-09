@@ -3,17 +3,19 @@ export class UsersRepository {
     this.pool = pool;
   }
 
-  async findById(id) {
-    const { rows } = await this.pool.query(
+  async findById(id, client = null) {
+    const db = client || this.pool;
+    const { rows } = await db.query(
       `SELECT id, email, first_name, last_name, currency_code, 
-              language, monthly_budget, is_active, created_at, updated_at 
+              language, monthly_budget, is_active, role, created_at, updated_at 
        FROM users WHERE id = $1`,
       [id]
     );
     return rows[0] || null;
   }
 
-  async update(id, data) {
+  async update(id, data, client = null) {
+    const db = client || this.pool;
     const fields = [];
     const values = [];
 
@@ -25,15 +27,15 @@ export class UsersRepository {
       }
     }
 
-    if (fields.length === 0) return this.findById(id);
+    if (fields.length === 0) return this.findById(id, client);
 
     values.push(id); // For the WHERE clause
 
-    await this.pool.query(
+    await db.query(
       `UPDATE users SET ${fields.join(', ')} WHERE id = $${values.length}`,
       values
     );
 
-    return this.findById(id);
+    return this.findById(id, client);
   }
 }

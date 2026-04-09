@@ -9,34 +9,10 @@ export class FixedExpensesService {
   }
 
   async createFixedExpense(userId, data) {
-    const category = await this.categoryRepository.findByIdAndUser(data.category_id, userId);
-    
-    if (!category) {
-      const error = new Error('Category not found or unauthorized');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    if (category.type !== 'expense') {
-      const error = new Error('Fixed expenses must use categories of type "expense"');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    return this.repository.create({ user_id: userId, ...data });
-  }
-
-  async updateFixedExpense(id, userId, data) {
-    const expense = await this.repository.findByIdAndUser(id, userId);
-    
-    if (!expense) {
-      const error = new Error('Fixed expense not found');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    if (data.category_id) {
-      const category = await this.categoryRepository.findByIdAndUser(data.category_id, userId);
+    const client = await this.repository.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const category = await this.categoryRepository.findByIdAndUser(data.category_id, userId, client);
       
       if (!category) {
         const error = new Error('Category not found or unauthorized');
@@ -49,22 +25,76 @@ export class FixedExpensesService {
         error.statusCode = 400;
         throw error;
       }
-    }
 
-    return this.repository.update(id, userId, data);
+      const expense = await this.repository.create({ user_id: userId, ...data }, client);
+      await client.query('COMMIT');
+      return expense;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateFixedExpense(id, userId, data) {
+    const client = await this.repository.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const expense = await this.repository.findByIdAndUser(id, userId, client);
+      
+      if (!expense) {
+        const error = new Error('Fixed expense not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (data.category_id) {
+        const category = await this.categoryRepository.findByIdAndUser(data.category_id, userId, client);
+        
+        if (!category) {
+          const error = new Error('Category not found or unauthorized');
+          error.statusCode = 404;
+          throw error;
+        }
+
+        if (category.type !== 'expense') {
+          const error = new Error('Fixed expenses must use categories of type "expense"');
+          error.statusCode = 400;
+          throw error;
+        }
+      }
+
+      const updated = await this.repository.update(id, userId, data, client);
+      await client.query('COMMIT');
+      return updated;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async deleteFixedExpense(id, userId) {
-    // We implement a "soft delete" to keep the history of the fixed expense
-    // without it actively triggering any future generation logic
-    const isDeleted = await this.repository.softDelete(id, userId);
-    
-    if (!isDeleted) {
-      const error = new Error('Fixed expense not found');
-      error.statusCode = 404;
+    const client = await this.repository.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const isDeleted = await this.repository.delete(id, userId, client);
+      
+      if (!isDeleted) {
+        const error = new Error('Fixed expense not found');
+        error.statusCode = 404;
+        throw error;
+      }
+      
+      await client.query('COMMIT');
+      return true;
+    } catch (error) {
+      await client.query('ROLLBACK');
       throw error;
+    } finally {
+      client.release();
     }
-    
-    return true;
   }
 }
