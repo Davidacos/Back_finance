@@ -5,13 +5,19 @@ import { sendError } from '../utils/response.js';
  * Verifies JWT token and attaches decoded user to req.user
  */
 export const authMiddleware = (env) => (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  let token = req.cookies?.accessToken;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return sendError(res, 'Authorization token required', 401);
+  // Fallback to Header for non-browser clients (like native mobile apps)
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
   }
 
-  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return sendError(res, 'Authorization token required', 401);
+  }
 
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET);

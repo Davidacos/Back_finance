@@ -32,13 +32,11 @@ export const createAuthRoutes = (pool, env) => {
 
   router.post(
     '/refresh-token',
-    validate(refreshTokenSchema),
     controller.refreshToken
   );
 
   router.post(
     '/logout',
-    validate(refreshTokenSchema),
     controller.logout
   );
 

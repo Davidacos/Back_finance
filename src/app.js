@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { logger } from './utils/logger.js';
 import { generalLimiter } from './middlewares/rateLimiter.middleware.js';
 import { loggerMiddleware } from './middlewares/logger.middleware.js';
@@ -26,9 +27,13 @@ export const createApp = (pool, env) => {
     cors({
       origin: env.CORS_ORIGIN,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+      credentials: true,
     })
   );
+
+  // ── Parsers ──────────────────────────────────────────────
+  app.use(cookieParser());
 
   // ── Core Middleware ──────────────────────────────────────
   app.use(express.json({ limit: '10kb' }));
